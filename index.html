@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reseñas UPIICSA</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-container">
+            <span class="nav-brand"><i class="fas fa-graduation-cap"></i> Reseñas UPIICSA</span>
+        </div>
+    </nav>
+
+    <main id="app">
+        <!-- VISTA 1: LISTA PRINCIPAL -->
+        <div id="view-main-list">
+            <header class="page-header">
+                <h1>Directorio de Profesores y Materias</h1>
+                <p>De estudiantes para estudiantes</p>
+            </header>
+
+            <div class="main-grid">
+                <!-- Columna Izquierda: Directorio y Búsqueda -->
+                <div class="directory-column">
+                    <div class="card">
+                        <div class="search-mode-selector">
+                            <button id="search-mode-profesor" class="search-mode-btn active" data-mode="profesor">Profesores</button>
+                            <button id="search-mode-materia" class="search-mode-btn" data-mode="materia">Materias</button>
+                        </div>
+                        <input type="text" id="buscador" placeholder="Buscar profesor...">
+                        <div id="lista-resultados">
+                            <!-- La lista de profesores o materias se carga aquí -->
+                        </div>
+                    </div>
+                </div>
+                <!-- Columna Derecha: Añadir Reseña -->
+                <div class="form-column">
+                    <div class="card">
+                        <h2 class="section-title"><span>Comparte tu Experiencia</span></h2>
+                        <form id="form-add-review" autocomplete="off">
+                            <p>Tu reseña ayuda a todos. Empieza a escribir y selecciona una sugerencia si ya existe.</p>
+                            <div class="input-container">
+                                <input type="text" id="add-nombre-profesor" placeholder="Nombre(s) del profesor" required>
+                                <div class="autocomplete-suggestions" id="nombre-suggestions"></div>
+                            </div>
+                            <div class="input-container">
+                                <input type="text" id="add-apellido-profesor" placeholder="Apellidos del profesor" required>
+                                <div class="autocomplete-suggestions" id="apellido-suggestions"></div>
+                            </div>
+                            <div class="input-container">
+                                <input type="text" id="add-materia-profesor" placeholder="Materia que cursaste" required>
+                                <div class="autocomplete-suggestions" id="materia-suggestions"></div>
+                            </div>
+                            <div class="input-container">
+                                <select id="add-carrera-profesor" required>
+                                    <option value="" disabled selected>Selecciona tu carrera</option>
+                                    <option value="Administración Industrial">Administración Industrial</option>
+                                    <option value="Ingeniería en Informática">Ingeniería en Informática</option>
+                                    <option value="Ingeniería en Transporte">Ingeniería en Transporte</option>
+                                    <option value="Ingeniería Ferroviaria">Ingeniería Ferroviaria</option>
+                                    <option value="Ingeniería Industrial">Ingeniería Industrial</option>
+                                    <option value="Licenciatura en Ciencias de la Informática">Licenciatura en Ciencias de la Informática</option>
+                                </select>
+                            </div>
+                            
+                            <label class="ratings-main-label">Calificación General:</label>
+                            <div class="star-rating-input" data-rating-type="general">
+                                <i class="far fa-star" data-value="1"></i><i class="far fa-star" data-value="2"></i>
+                                <i class="far fa-star" data-value="3"></i><i class="far fa-star" data-value="4"></i>
+                                <i class="far fa-star" data-value="5"></i>
+                            </div>
+                            
+                            <h4 class="ratings-title">Calificaciones Detalladas (Opcional)</h4>
+                            <div class="detailed-ratings-container">
+                                <label>Claridad al Explicar:</label>
+                                <div class="star-rating-input" data-rating-type="claridad">
+                                    <i class="far fa-star" data-value="1"></i><i class="far fa-star" data-value="2"></i>
+                                    <i class="far fa-star" data-value="3"></i><i class="far fa-star" data-value="4"></i>
+                                    <i class="far fa-star" data-value="5"></i>
+                                </div>
+                                <label>Dificultad del Curso:</label>
+                                <div class="star-rating-input" data-rating-type="dificultad">
+                                    <i class="far fa-star" data-value="1"></i><i class="far fa-star" data-value="2"></i>
+                                    <i class="far fa-star" data-value="3"></i><i class="far fa-star" data-value="4"></i>
+                                    <i class="far fa-star" data-value="5"></i>
+                                </div>
+                                <label>Carga de Tareas:</label>
+                                <div class="star-rating-input" data-rating-type="carga">
+                                    <i class="far fa-star" data-value="1"></i><i class="far fa-star" data-value="2"></i>
+                                    <i class="far fa-star" data-value="3"></i><i class="far fa-star" data-value="4"></i>
+                                    <i class="far fa-star" data-value="5"></i>
+                                </div>
+                            </div>
+
+                            <textarea id="add-texto-review" placeholder="Describe tu experiencia..." required></textarea>
+                            <button type="submit" class="btn-primary">Publicar Reseña</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA 2: DETALLE DE UN PROFESOR (Contenedor estático) -->
+        <div id="view-profesor-detail" style="display: none;">
+            <button class="btn-back"><i class="fas fa-arrow-left"></i> Volver al Directorio</button>
+            <header class="summary-card"></header>
+            <div class="reviews-container">
+                <h2 class="section-title"><span>Reseñas de la Comunidad</span></h2>
+                <div class="materia-tags-container"></div>
+                <div class="detail-reviews-list"></div>
+            </div>
+        </div>
+
+        <!-- VISTA 3: DETALLE DE UNA MATERIA (Contenedor estático) -->
+        <div id="view-materia-detail" style="display: none;">
+            <button class="btn-back"><i class="fas fa-arrow-left"></i> Volver al Directorio</button>
+            <header class="page-header"></header>
+            <div id="materia-profesores-list"></div>
+        </div>
+    </main>
+    
+    <footer class="main-footer">
+        <p>Desarrollado por Eduardo MG</p>
+        <a href="mailto:eduardomg1499@outlook.es?Subject=Sugerencia%20para%20Reseñas%20UPIICSA">¿Tienes alguna sugerencia? Envíame un correo</a>
+    </footer>
+
+    <!-- CHAT FLOTANTE -->
+    <div id="chat-widget">
+        <div id="chat-window" class="hidden">
+            <div class="chat-header"><h3><i class="fas fa-comments"></i> Chat General</h3></div>
+            <div id="chat-messages"></div>
+            <form id="chat-form">
+                <div class="alias-container">
+                    <input type="text" id="chat-alias" placeholder="Tu alias..." required>
+                    <button type="button" id="edit-alias-btn" title="Editar alias"><i class="fas fa-edit"></i></button>
+                </div>
+                <input type="text" id="chat-input" placeholder="Escribe un mensaje..." required autocomplete="off">
+                <button type="submit"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>
+        <button id="chat-toggle-button"><i class="fas fa-comment-dots"></i></button>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
