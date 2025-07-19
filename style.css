@@ -249,6 +249,41 @@ textarea { min-height: 120px; resize: vertical; margin-top: 1rem; }
     align-items: center;
 }
 
+/* --- ESTILOS PARA RESPUESTAS A COMENTARIOS --- */
+.replies-container {
+    margin-top: 1rem;
+    padding-left: 2rem;
+    border-left: 2px solid var(--color-border);
+}
+.reply-card {
+    background-color: #f9fafb;
+    padding: 1rem;
+    border-radius: 5px;
+    margin-bottom: 0.5rem;
+}
+.reply-header {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.5rem;
+}
+.reply-header strong { color: var(--color-text-primary); }
+.reply-form {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+.reply-form textarea {
+    flex-grow: 1;
+    min-height: 40px;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+.reply-form button {
+    width: auto;
+    font-size: 0.9rem;
+    padding: 8px 15px;
+}
+
 /* --- PIE DE PÁGINA --- */
 .main-footer {
     text-align: center; padding: 2rem;

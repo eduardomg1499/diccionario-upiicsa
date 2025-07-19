@@ -291,26 +291,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const profDoc = await transaction.get(profesorRef);
                 const profData = profDoc.data() || {};
                 
-                const newTotalReseñas = (profData.totalReseñas || 0) + 1;
-                const newSumaCalificaciones = (profData.sumaCalificaciones || 0) + currentRatings.general;
-                const newSumaClaridad = (profData.sumaClaridad || 0) + currentRatings.claridad;
-                const newSumaDificultad = (profData.sumaDificultad || 0) + currentRatings.dificultad;
-                const newSumaCarga = (profData.sumaCarga || 0) + currentRatings.carga;
-                const newMaterias = new Set(profData.materias || []);
-                newMaterias.add(materia);
-                const newCarreras = new Set(profData.carreras || []);
-                newCarreras.add(carrera);
+                const updateData = {
+                    nombre, 
+                    apellido,
+                    materias: firebase.firestore.FieldValue.arrayUnion(materia),
+                    carreras: firebase.firestore.FieldValue.arrayUnion(carrera),
+                    totalReseñas: firebase.firestore.FieldValue.increment(1),
+                    sumaCalificaciones: firebase.firestore.FieldValue.increment(currentRatings.general),
+                    sumaClaridad: firebase.firestore.FieldValue.increment(currentRatings.claridad),
+                    sumaDificultad: firebase.firestore.FieldValue.increment(currentRatings.dificultad),
+                    sumaCarga: firebase.firestore.FieldValue.increment(currentRatings.carga)
+                };
 
-                transaction.set(profesorRef, {
-                    nombre, apellido,
-                    materias: Array.from(newMaterias).sort(),
-                    carreras: Array.from(newCarreras).sort(),
-                    totalReseñas: newTotalReseñas,
-                    sumaCalificaciones: newSumaCalificaciones,
-                    sumaClaridad: newSumaClaridad,
-                    sumaDificultad: newSumaDificultad,
-                    sumaCarga: newSumaCarga
-                }, { merge: true });
+                if (!profDoc.exists) {
+                    transaction.set(profesorRef, updateData);
+                } else {
+                    transaction.update(profesorRef, updateData);
+                }
 
                 const reseñaRef = db.collection('resenas').doc();
                 transaction.set(reseñaRef, {
@@ -330,7 +327,11 @@ document.addEventListener('DOMContentLoaded', () => {
             resetStarsUI();
         } catch (error) {
             console.error("Error al publicar la reseña: ", error);
-            alert("Hubo un problema al publicar tu reseña. Por favor, intenta de nuevo.");
+            if (error.code === 'resource-exhausted' || error.message.includes('429')) {
+                alert("¡Wow, la página está que arde! 🔥 Hemos alcanzado el límite de consultas gratuitas por hoy. ¡Muchas gracias por usar la plataforma! Por favor, intenta publicar tu reseña mañana. El servicio se reinicia cada día.");
+            } else {
+                alert("Hubo un problema al publicar tu reseña. Por favor, intenta de nuevo.");
+            }
         }
     });
 
@@ -467,13 +468,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="review-actions">
                     <button data-action="like"><i class="fas fa-thumbs-up"></i> <span>${reseña.likes || 0}</span></button>
                     <button data-action="dislike"><i class="fas fa-thumbs-down"></i> <span>${reseña.dislikes || 0}</span></button>
+                    <button data-action="reply"><i class="fas fa-reply"></i> Responder</button>
                 </div>
-            </div>`;
+            </div>
+            <div class="replies-container"></div>`;
 
         const likeBtn = card.querySelector('[data-action="like"]');
         const dislikeBtn = card.querySelector('[data-action="dislike"]');
-        const voted = localStorage.getItem(`voted_${id}`);
+        const replyBtn = card.querySelector('[data-action="reply"]');
+        const repliesContainer = card.querySelector('.replies-container');
+        
+        replyBtn.addEventListener('click', () => toggleReplyForm(card, id));
+        
+        // Cargar respuestas existentes
+        db.collection('resenas').doc(id).collection('respuestas').orderBy('timestamp').onSnapshot(snapshot => {
+            repliesContainer.innerHTML = ''; // Limpiar para evitar duplicados
+            snapshot.forEach(doc => {
+                const reply = doc.data();
+                const replyCard = document.createElement('div');
+                replyCard.className = 'reply-card';
+                replyCard.innerHTML = `<p class="reply-header"><strong>${reply.alias || 'Anónimo'}</strong> respondió:</p><p>${reply.texto}</p>`;
+                repliesContainer.appendChild(replyCard);
+            });
+        });
 
+        const voted = localStorage.getItem(`voted_${id}`);
         if (voted) {
             likeBtn.disabled = true;
             dislikeBtn.disabled = true;
@@ -483,6 +502,34 @@ document.addEventListener('DOMContentLoaded', () => {
             dislikeBtn.addEventListener('click', () => handleVote(id, 'dislikes', likeBtn, dislikeBtn));
         }
         return card;
+    };
+
+    const toggleReplyForm = (reviewCard, reviewId) => {
+        let form = reviewCard.querySelector('.reply-form');
+        if (form) {
+            form.remove();
+        } else {
+            form = document.createElement('form');
+            form.className = 'reply-form';
+            form.innerHTML = `
+                <textarea placeholder="Escribe una respuesta..." required></textarea>
+                <button type="submit" class="btn-primary">Enviar</button>
+            `;
+            reviewCard.appendChild(form);
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const texto = form.querySelector('textarea').value.trim();
+                const alias = localStorage.getItem('chatAlias') || 'Anónimo';
+                if (texto) {
+                    db.collection('resenas').doc(reviewId).collection('respuestas').add({
+                        texto,
+                        alias,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    form.remove();
+                }
+            });
+        }
     };
 
     const handleVote = (reviewId, voteType, likeBtn, dislikeBtn) => {
