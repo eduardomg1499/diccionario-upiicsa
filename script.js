@@ -10,8 +10,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- INICIALIZACIÓN ---
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
     const db = firebase.firestore();
+    const auth = firebase.auth(); 
+
+    // --- AUTENTICACIÓN ANÓNIMA (SISTEMA DE SEGURIDAD) ---
+    auth.signInAnonymously()
+        .then(() => {
+            console.log("Sistema de seguridad activo: Usuario autenticado anónimamente.");
+        })
+        .catch((error) => {
+            console.error("Error iniciando el sistema de seguridad:", error);
+        });
+
     let profesoresDataCache = [];
     let materiasUnicasCache = new Set();
     let carrerasUnicasCache = new Set();
@@ -64,30 +77,44 @@ document.addEventListener('DOMContentLoaded', () => {
         chatAliasInput.readOnly = false;
         chatAliasInput.focus();
     });
-    db.collection('chat_general').orderBy('timestamp', 'desc').limit(50).onSnapshot(snapshot => {
-        chatMessages.innerHTML = '';
-        if (snapshot.empty) return;
-        snapshot.docs.reverse().forEach(doc => {
-            const msg = doc.data();
-            const fecha = msg.timestamp ? msg.timestamp.toDate() : new Date();
-            const fechaFormateada = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-            const horaFormateada = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'chat-message';
-            msgDiv.innerHTML = `
-                <div><span class="alias">${msg.alias || 'Anónimo'}:</span> <span class="text">${msg.texto}</span></div>
-                <div class="timestamp">${horaFormateada} - ${fechaFormateada}</div>`;
-            chatMessages.appendChild(msgDiv);
-        });
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            db.collection('chat_general').orderBy('timestamp', 'desc').limit(50).onSnapshot(snapshot => {
+                chatMessages.innerHTML = '';
+                if (snapshot.empty) return;
+                snapshot.docs.reverse().forEach(doc => {
+                    const msg = doc.data();
+                    const fecha = msg.timestamp ? msg.timestamp.toDate() : new Date();
+                    const fechaFormateada = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                    const horaFormateada = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'chat-message';
+                    msgDiv.innerHTML = `
+                        <div><span class="alias">${msg.alias || 'Anónimo'}:</span> <span class="text">${msg.texto}</span></div>
+                        <div class="timestamp">${horaFormateada} - ${fechaFormateada}</div>`;
+                    chatMessages.appendChild(msgDiv);
+                });
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        }
     });
+
     chatForm.addEventListener('submit', e => {
         e.preventDefault();
         const alias = chatAliasInput.value.trim();
         const texto = chatInput.value.trim();
+        
+        if (!auth.currentUser) return;
+
         if (texto && alias) {
-            db.collection('chat_general').add({ alias, texto, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+            db.collection('chat_general').add({ 
+                alias, 
+                texto, 
+                userId: auth.currentUser.uid,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp() 
+            });
             localStorage.setItem('chatAlias', alias);
             chatAliasInput.readOnly = true;
             chatInput.value = '';
@@ -110,12 +137,107 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- LÓGICA DE PROFESORES Y MATERIAS ---
     const normalizarTexto = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
+    // =========================================================================
+    // 1. FILTRO DE SPAM PARA PROFESORES (Anti-Bots)
+    // =========================================================================
+    const esSpamProfesor = (profesor) => {
+        const nombre = profesor.nombre ? profesor.nombre.toLowerCase().trim() : "";
+        const apellido = profesor.apellido ? profesor.apellido.toLowerCase().trim() : "";
+        const nombreCompleto = `${nombre} ${apellido}`;
+
+        // Regla: Prefijos de Bot detectados en tu app (AAA_Test, AAFake, 0000)
+        if (/^(aaa_test|aafake|aaab|aaaa|aab|0000|01usuario|1primero)/.test(apellido)) return true;
+        if (/^(aaa_test|aafake|aaab|aaaa|aab|01usuario|1primero)/.test(nombre)) return true;
+        
+        // Regla: Contiene números
+        if (/[\d]/.test(nombre) || /[\d]/.test(apellido)) return true;
+
+        // Regla: Nombres de pila genéricos de bot
+        const nombresBot = [
+            'aaaron', 'aaaaron', 'aaron', 'abril', 'adrian', 'adriana', 'agustin',
+            'alba', 'alberto', 'alejandra', 'alejandro', 'alfonso', 'alfredo', 'alicia',
+            'alma', 'amanda', 'amelia', 'ana', 'andres', 'angel', 'angela', 'araceli',
+            'armando', 'arturo', 'aurora', 'azucena', 'carlos', 'carmen', 'emma',
+            'james', 'john', 'jose', 'juan', 'lucia', 'maria', 'mary', 'olivia',
+            'pedro', 'william', 'aaa', 'aab', 'aafake'
+        ];
+
+        // Regla: Apellidos que el bot está atacando masivamente
+        const apellidosSuspect = [
+            'abad', 'abarca', 'abascal', 'abelardo', 'abril', 'acevedo', 'acosta',
+            'acuña', 'adame', 'aguilar', 'aguilera', 'aguirre', 'alanís', 'alanis',
+            'alba', 'alcalá', 'alcala', 'alcántara', 'alcantara', 'alemán', 'aleman',
+            'alfaro', 'almanza', 'alonso', 'altamirano', 'alvarado', 'amador', 'amaya',
+            'andrade', 'angeles', 'aparicio', 'aquino', 'aragón', 'aragon', 'aranda',
+            'arce', 'arellano', 'arenas', 'arias', 'armenta', 'arriaga', 'arrieta',
+            'arroyo', 'ayala', 'azcárraga', 'azcarraga', 'garcía', 'garcia',
+            'gonzález', 'gonzalez', 'hernández', 'hernandez', 'lópez', 'lopez',
+            'martínez', 'martinez', 'rodríguez', 'rodriguez', 'sánchez', 'sanchez',
+            'álvarez', 'alvarez', 'avalos', 'ávila', 'avila', 'aaa_test'
+        ];
+
+        // Bloqueo inteligente: Si apellido es sospechoso Y nombre es genérico -> SPAM
+        if (apellidosSuspect.includes(apellido)) {
+            if (nombresBot.includes(nombre)) {
+                 if (!nombre.includes(" ")) return true; // Salva a "Juan Carlos"
+            }
+        }
+
+        // Regla: Apellidos en inglés genéricos
+        if (['smith', 'jones', 'brown', 'johnson', 'williams'].includes(apellido)) return true;
+
+        // Regla: Prefijos técnicos de bot
+        if (apellido.startsWith('aabest') || apellido.startsWith('aahack') || apellido.startsWith('aaa_')) return true;
+
+        // Regla: Caracteres no latinos (Ruso, Chino, etc)
+        if (/[^\u0000-\u00FF\u0100-\u017F\s\.\-]/.test(nombreCompleto)) return true;
+
+        return false;
+    };
+
+    // =========================================================================
+    // 2. FILTRO DE SPAM PARA MATERIAS (Anti-Chino/Ruso/Basura)
+    // =========================================================================
+    const esMateriaSpam = (materia) => {
+        if (!materia) return true;
+        const mat = materia.toLowerCase().trim();
+
+        // 1. CARACTERES ILEGALES: Bloquea Chino, Ruso, Árabe, Japonés
+        // Solo permite letras latinas (con acentos), números, espacios, puntos y paréntesis
+        if (/[^\u0000-\u024F\u1E00-\u1EFF\s\.\-\(\)áéíóúÁÉÍÓÚñÑüÜ0-9]/.test(mat)) return true;
+
+        // 2. PALABRAS DE BOT O INGLES INNECESARIO
+        const palabrasBasura = ['mixed', 'calculus', 'physics', 'chemistry', 'economy', 'math', 'aaa_', 'test', 'fake'];
+        if (palabrasBasura.some(p => mat.includes(p))) return true;
+
+        // 3. APELLIDOS DE PROFESORES COLADOS EN MATERIAS
+        // El bot puso apellidos donde van las materias. Los bloqueamos.
+        const apellidosEnMaterias = ['andrade', 'cruz', 'carrillo', 'solorzano'];
+        if (apellidosEnMaterias.includes(mat)) return true;
+
+        // 4. ERRORES DE DEDO DEL BOT
+        if (mat.endsWith('aa')) return true; // Ej: "Diferencialaa"
+
+        return false;
+    };
+
     db.collection("profesores").orderBy('apellido').onSnapshot(snapshot => {
-        profesoresDataCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // --- FILTRO MAESTRO DE PROFESORES ---
+        profesoresDataCache = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(prof => !esSpamProfesor(prof)); 
+
         materiasUnicasCache.clear();
         carrerasUnicasCache.clear();
+        
         profesoresDataCache.forEach(prof => {
-            prof.materias?.forEach(materia => materiasUnicasCache.add(materia));
+            prof.materias?.forEach(materia => {
+                // --- FILTRO MAESTRO DE MATERIAS ---
+                // Solo agregamos la materia si NO es spam
+                if (!esMateriaSpam(materia)) {
+                    materiasUnicasCache.add(materia);
+                }
+            });
             prof.carreras?.forEach(carrera => carrerasUnicasCache.add(carrera));
         });
         buscador.dispatchEvent(new Event('input'));
@@ -195,7 +317,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const reviewsSnapshot = await db.collection('resenas').where('profesorId', '==', profesor.id).orderBy('timestamp', 'desc').get();
         const todasLasResenas = reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        renderizarFiltrosYResenas(todasLasResenas, profesor.materias || []);
+        // Filtramos las materias spam también en el detalle
+        const materiasLimpias = (profesor.materias || []).filter(m => !esMateriaSpam(m));
+        renderizarFiltrosYResenas(todasLasResenas, materiasLimpias);
     };
 
     const abrirDetalleMateria = async (nombreMateria) => {
@@ -268,6 +392,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     formAddReview.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
+        if (!auth.currentUser) {
+            alert("Estableciendo conexión segura... intenta en unos segundos.");
+            return;
+        }
+
         const nombre = inputNombre.value.trim();
         const apellido = inputApellido.value.trim();
         const materia = inputMateria.value.trim();
@@ -283,17 +413,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Validación extra frontend para evitar enviar spam
+        if (esSpamProfesor({nombre, apellido})) {
+             alert("Error: Nombre inválido detectado.");
+             return;
+        }
+
         const profesorId = normalizarTexto(apellido + nombre);
         const profesorRef = db.collection('profesores').doc(profesorId);
         
         try {
             await db.runTransaction(async (transaction) => {
                 const profDoc = await transaction.get(profesorRef);
-                const profData = profDoc.data() || {};
                 
+                // --- CANDADO DE SEGURIDAD (BACKEND LOGIC) ---
+                if (!profDoc.exists) {
+                    throw "PROFESOR_NO_EXISTE";
+                }
+
                 const updateData = {
-                    nombre, 
-                    apellido,
                     materias: firebase.firestore.FieldValue.arrayUnion(materia),
                     carreras: firebase.firestore.FieldValue.arrayUnion(carrera),
                     totalReseñas: firebase.firestore.FieldValue.increment(1),
@@ -303,15 +441,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     sumaCarga: firebase.firestore.FieldValue.increment(currentRatings.carga)
                 };
 
-                if (!profDoc.exists) {
-                    transaction.set(profesorRef, updateData);
-                } else {
-                    transaction.update(profesorRef, updateData);
-                }
+                transaction.update(profesorRef, updateData);
 
                 const reseñaRef = db.collection('resenas').doc();
                 transaction.set(reseñaRef, {
-                    profesorId, materia, calificacion: currentRatings.general, texto,
+                    profesorId, 
+                    materia, 
+                    calificacion: currentRatings.general, 
+                    texto,
+                    userId: auth.currentUser.uid, 
                     calificacionesDetalladas: {
                         claridad: currentRatings.claridad,
                         dificultad: currentRatings.dificultad,
@@ -326,9 +464,13 @@ document.addEventListener('DOMContentLoaded', () => {
             formAddReview.reset();
             resetStarsUI();
         } catch (error) {
-            console.error("Error al publicar la reseña: ", error);
-            if (error.code === 'resource-exhausted' || error.message.includes('429')) {
-                alert("¡Wow, la página está que arde! 🔥 Hemos alcanzado el límite de consultas gratuitas por hoy. ¡Muchas gracias por usar la plataforma! Por favor, intenta publicar tu reseña mañana. El servicio se reinicia cada día.");
+            console.error("Error al publicar: ", error);
+            
+            if (error === "PROFESOR_NO_EXISTE") {
+                alert("⛔ ERROR DE SEGURIDAD: No se puede agregar un profesor nuevo automáticamente. \n\nPara evitar spam, solo se permiten reseñas a profesores existentes. Si falta uno real, contáctanos.");
+            } 
+            else if (error.code === 'resource-exhausted' || (error.message && error.message.includes('429'))) {
+                alert("¡Límite diario alcanzado! 🔥 Por el ataque de bots, el servicio se ha pausado por hoy. Intenta mañana.");
             } else {
                 alert("Hubo un problema al publicar tu reseña. Por favor, intenta de nuevo.");
             }
@@ -391,7 +533,6 @@ document.addEventListener('DOMContentLoaded', () => {
             suggestionsMateria.style.display = 'none';
         }
     });
-
 
     // --- HELPERS Y LÓGICA DE UI ---
     const getStarsHTML = (rating) => {
@@ -482,7 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Cargar respuestas existentes
         db.collection('resenas').doc(id).collection('respuestas').orderBy('timestamp').onSnapshot(snapshot => {
-            repliesContainer.innerHTML = ''; // Limpiar para evitar duplicados
+            repliesContainer.innerHTML = '';
             snapshot.forEach(doc => {
                 const reply = doc.data();
                 const replyCard = document.createElement('div');
@@ -506,6 +647,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const toggleReplyForm = (reviewCard, reviewId) => {
         let form = reviewCard.querySelector('.reply-form');
+        
+        if (!auth.currentUser) {
+            alert("Necesitas conexión segura para responder.");
+            return;
+        }
+
         if (form) {
             form.remove();
         } else {
@@ -524,6 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     db.collection('resenas').doc(reviewId).collection('respuestas').add({
                         texto,
                         alias,
+                        userId: auth.currentUser.uid,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     form.remove();
@@ -533,6 +681,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleVote = (reviewId, voteType, likeBtn, dislikeBtn) => {
+        if (!auth.currentUser) return; 
+
         const votedKey = `voted_${reviewId}`;
         if (localStorage.getItem(votedKey)) return;
 

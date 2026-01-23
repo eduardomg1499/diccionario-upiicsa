@@ -20,7 +20,6 @@
     </nav>
 
     <main id="app">
-        <!-- VISTA 1: LISTA PRINCIPAL -->
         <div id="view-main-list">
             <header class="page-header">
                 <h1>Directorio de Profesores y Materias</h1>
@@ -28,7 +27,6 @@
             </header>
 
             <div class="main-grid">
-                <!-- Columna Izquierda: Directorio y Búsqueda -->
                 <div class="directory-column">
                     <div class="card">
                         <div class="search-mode-selector">
@@ -37,11 +35,9 @@
                         </div>
                         <input type="text" id="buscador" placeholder="Buscar profesor...">
                         <div id="lista-resultados">
-                            <!-- La lista de profesores o materias se carga aquí -->
-                        </div>
+                            </div>
                     </div>
                 </div>
-                <!-- Columna Derecha: Añadir Reseña -->
                 <div class="form-column">
                     <div class="card">
                         <h2 class="section-title"><span>Comparte tu Experiencia</span></h2>
@@ -108,7 +104,6 @@
             </div>
         </div>
 
-        <!-- VISTA 2: DETALLE DE UN PROFESOR (Contenedor estático) -->
         <div id="view-profesor-detail" style="display: none;">
             <button class="btn-back"><i class="fas fa-arrow-left"></i> Volver al Directorio</button>
             <header class="summary-card"></header>
@@ -119,7 +114,6 @@
             </div>
         </div>
 
-        <!-- VISTA 3: DETALLE DE UNA MATERIA (Contenedor estático) -->
         <div id="view-materia-detail" style="display: none;">
             <button class="btn-back"><i class="fas fa-arrow-left"></i> Volver al Directorio</button>
             <header class="page-header"></header>
@@ -132,7 +126,6 @@
         <a href="mailto:eduardomg1499@outlook.es?Subject=Sugerencia%20para%20Reseñas%20UPIICSA">¿Tienes alguna sugerencia? Envíame un correo</a>
     </footer>
 
-    <!-- CHAT FLOTANTE -->
     <div id="chat-widget">
         <div id="chat-window" class="hidden">
             <div class="chat-header"><h3><i class="fas fa-comments"></i> Chat General</h3></div>
@@ -150,7 +143,11 @@
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
     <script src="script.js"></script>
 </body>
 </html>
