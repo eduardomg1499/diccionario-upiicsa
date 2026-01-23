@@ -16,13 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const db = firebase.firestore();
     const auth = firebase.auth(); 
 
-    // --- AUTENTICACIÓN ANÓNIMA (SISTEMA DE SEGURIDAD) ---
+    // --- AUTENTICACIÓN ANÓNIMA ---
     auth.signInAnonymously()
         .then(() => {
-            console.log("Sistema de seguridad activo: Usuario autenticado anónimamente.");
+            console.log("Sistema de seguridad activo.");
         })
         .catch((error) => {
-            console.error("Error iniciando el sistema de seguridad:", error);
+            console.error("Error seguridad:", error);
         });
 
     let profesoresDataCache = [];
@@ -56,14 +56,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchModeProfesorBtn = document.getElementById('search-mode-profesor');
     const searchModeMateriaBtn = document.getElementById('search-mode-materia');
 
-    // --- LÓGICA DE NAVEGACIÓN Y VISTAS ---
+    // --- HELPERS GENERALES ---
+    // Normalizar: quita acentos y pasa a minúsculas (Ángel -> angel)
+    const normalizarTexto = (texto) => {
+        if (!texto) return "";
+        return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    };
+
+    // --- LÓGICA DE NAVEGACIÓN ---
     const mostrarVista = (vista) => {
         viewMain.style.display = 'none';
         viewProfesorDetail.style.display = 'none';
         viewMateriaDetail.style.display = 'none';
         vista.style.display = 'block';
     };
-    
     const goBack = () => mostrarVista(viewMain);
 
     // --- LÓGICA DEL CHAT ---
@@ -86,14 +92,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 snapshot.docs.reverse().forEach(doc => {
                     const msg = doc.data();
                     const fecha = msg.timestamp ? msg.timestamp.toDate() : new Date();
-                    const fechaFormateada = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-                    const horaFormateada = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                    const hora = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                    const dia = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
                     const msgDiv = document.createElement('div');
                     msgDiv.className = 'chat-message';
                     msgDiv.innerHTML = `
                         <div><span class="alias">${msg.alias || 'Anónimo'}:</span> <span class="text">${msg.texto}</span></div>
-                        <div class="timestamp">${horaFormateada} - ${fechaFormateada}</div>`;
+                        <div class="timestamp">${hora} - ${dia}</div>`;
                     chatMessages.appendChild(msgDiv);
                 });
                 chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -105,13 +111,10 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const alias = chatAliasInput.value.trim();
         const texto = chatInput.value.trim();
-        
         if (!auth.currentUser) return;
-
         if (texto && alias) {
             db.collection('chat_general').add({ 
-                alias, 
-                texto, 
+                alias, texto, 
                 userId: auth.currentUser.uid,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp() 
             });
@@ -119,11 +122,11 @@ document.addEventListener('DOMContentLoaded', () => {
             chatAliasInput.readOnly = true;
             chatInput.value = '';
         } else if (!alias) {
-            alert('Por favor, ingresa un alias para chatear.');
+            alert('Ingresa un alias.');
         }
     });
 
-    // --- LÓGICA DE BÚSQUEDA DUAL ---
+    // --- BÚSQUEDA ---
     const setSearchMode = (mode) => {
         searchMode = mode;
         searchModeProfesorBtn.classList.toggle('active', mode === 'profesor');
@@ -134,95 +137,90 @@ document.addEventListener('DOMContentLoaded', () => {
     searchModeProfesorBtn.addEventListener('click', () => setSearchMode('profesor'));
     searchModeMateriaBtn.addEventListener('click', () => setSearchMode('materia'));
 
-    // --- LÓGICA DE PROFESORES Y MATERIAS ---
-    const normalizarTexto = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
     // =========================================================================
-    // 1. FILTRO DE SPAM PARA PROFESORES (Anti-Bots)
+    // 1. FILTRO DE SPAM PARA PROFESORES (Actualizado con tu lista y acentos)
     // =========================================================================
     const esSpamProfesor = (profesor) => {
-        const nombre = profesor.nombre ? profesor.nombre.toLowerCase().trim() : "";
-        const apellido = profesor.apellido ? profesor.apellido.toLowerCase().trim() : "";
+        // Normalizamos (sin acentos) para la comparación lógica
+        const nombre = normalizarTexto(profesor.nombre);
+        const apellido = normalizarTexto(profesor.apellido);
         const nombreCompleto = `${nombre} ${apellido}`;
 
-        // Regla: Prefijos de Bot detectados en tu app (AAA_Test, AAFake, 0000)
-        if (/^(aaa_test|aafake|aaab|aaaa|aab|0000|01usuario|1primero)/.test(apellido)) return true;
-        if (/^(aaa_test|aafake|aaab|aaaa|aab|01usuario|1primero)/.test(nombre)) return true;
+        // 1. Patrones de Bot en Nombres/Apellidos
+        const patronesBot = /^(aaa_|aafake|aaab|aaaa|aab|0000|01usuario|1primero|aabest|aahack|aahacker)/;
+        if (patronesBot.test(apellido)) return true;
+        if (patronesBot.test(nombre)) return true;
         
-        // Regla: Contiene números
+        // 2. Números
         if (/[\d]/.test(nombre) || /[\d]/.test(apellido)) return true;
 
-        // Regla: Nombres de pila genéricos de bot
+        // 3. Nombres de pila genéricos usados por el bot
+        // Incluimos las versiones normalizadas (sin tilde) de todos los nombres que pediste
         const nombresBot = [
             'aaaron', 'aaaaron', 'aaron', 'abril', 'adrian', 'adriana', 'agustin',
             'alba', 'alberto', 'alejandra', 'alejandro', 'alfonso', 'alfredo', 'alicia',
             'alma', 'amanda', 'amelia', 'ana', 'andres', 'angel', 'angela', 'araceli',
             'armando', 'arturo', 'aurora', 'azucena', 'carlos', 'carmen', 'emma',
             'james', 'john', 'jose', 'juan', 'lucia', 'maria', 'mary', 'olivia',
-            'pedro', 'william', 'aaa', 'aab', 'aafake'
+            'pedro', 'william', 'aaa', 'aab', 'aafake', 'aahacker'
         ];
 
-        // Regla: Apellidos que el bot está atacando masivamente
+        // 4. Apellidos atacados (Lista de víctimas del bot)
+        // Agregamos 'adrian' aquí también por si el bot lo pone como apellido
         const apellidosSuspect = [
             'abad', 'abarca', 'abascal', 'abelardo', 'abril', 'acevedo', 'acosta',
-            'acuña', 'adame', 'aguilar', 'aguilera', 'aguirre', 'alanís', 'alanis',
-            'alba', 'alcalá', 'alcala', 'alcántara', 'alcantara', 'alemán', 'aleman',
-            'alfaro', 'almanza', 'alonso', 'altamirano', 'alvarado', 'amador', 'amaya',
-            'andrade', 'angeles', 'aparicio', 'aquino', 'aragón', 'aragon', 'aranda',
-            'arce', 'arellano', 'arenas', 'arias', 'armenta', 'arriaga', 'arrieta',
-            'arroyo', 'ayala', 'azcárraga', 'azcarraga', 'garcía', 'garcia',
-            'gonzález', 'gonzalez', 'hernández', 'hernandez', 'lópez', 'lopez',
-            'martínez', 'martinez', 'rodríguez', 'rodriguez', 'sánchez', 'sanchez',
-            'álvarez', 'alvarez', 'avalos', 'ávila', 'avila', 'aaa_test'
+            'acuña', 'adame', 'aguilar', 'aguilera', 'aguirre', 'alanis', 'alba', 
+            'alcala', 'alcantara', 'aleman', 'alfaro', 'almanza', 'alonso', 
+            'altamirano', 'alvarado', 'amador', 'amaya', 'andrade', 'angeles', 
+            'aparicio', 'aquino', 'aragon', 'aranda', 'arce', 'arellano', 'arenas', 
+            'arias', 'armenta', 'arriaga', 'arrieta', 'arroyo', 'ayala', 'azcarraga', 
+            'garcia', 'gonzalez', 'hernandez', 'lopez', 'martinez', 'rodriguez', 
+            'sanchez', 'alvarez', 'avalos', 'avila', 'adrian'
         ];
 
-        // Bloqueo inteligente: Si apellido es sospechoso Y nombre es genérico -> SPAM
+        // Lógica de intersección: Si es apellido sospechoso Y nombre genérico -> SPAM
         if (apellidosSuspect.includes(apellido)) {
             if (nombresBot.includes(nombre)) {
-                 if (!nombre.includes(" ")) return true; // Salva a "Juan Carlos"
+                 // Permitimos nombres compuestos (ej. "Juan Carlos"), el bot suele usar uno solo.
+                 if (!nombre.includes(" ")) return true;
             }
         }
 
-        // Regla: Apellidos en inglés genéricos
+        // 5. Apellidos en inglés genéricos
         if (['smith', 'jones', 'brown', 'johnson', 'williams'].includes(apellido)) return true;
 
-        // Regla: Prefijos técnicos de bot
-        if (apellido.startsWith('aabest') || apellido.startsWith('aahack') || apellido.startsWith('aaa_')) return true;
-
-        // Regla: Caracteres no latinos (Ruso, Chino, etc)
-        if (/[^\u0000-\u00FF\u0100-\u017F\s\.\-]/.test(nombreCompleto)) return true;
+        // 6. Caracteres raros (Ruso, Chino, etc)
+        const rawName = (profesor.nombre + " " + profesor.apellido).toLowerCase();
+        if (/[^\u0000-\u00FF\u0100-\u017F\s\.\-]/.test(rawName)) return true;
 
         return false;
     };
 
     // =========================================================================
-    // 2. FILTRO DE SPAM PARA MATERIAS (Anti-Chino/Ruso/Basura)
+    // 2. FILTRO DE SPAM PARA MATERIAS Y RESEÑAS
     // =========================================================================
     const esMateriaSpam = (materia) => {
         if (!materia) return true;
         const mat = materia.toLowerCase().trim();
 
-        // 1. CARACTERES ILEGALES: Bloquea Chino, Ruso, Árabe, Japonés
-        // Solo permite letras latinas (con acentos), números, espacios, puntos y paréntesis
+        // 1. Bloqueo de caracteres no latinos (Chino, Ruso, Árabe)
         if (/[^\u0000-\u024F\u1E00-\u1EFF\s\.\-\(\)áéíóúÁÉÍÓÚñÑüÜ0-9]/.test(mat)) return true;
 
-        // 2. PALABRAS DE BOT O INGLES INNECESARIO
+        // 2. Palabras clave de Spam
         const palabrasBasura = ['mixed', 'calculus', 'physics', 'chemistry', 'economy', 'math', 'aaa_', 'test', 'fake'];
         if (palabrasBasura.some(p => mat.includes(p))) return true;
 
-        // 3. APELLIDOS DE PROFESORES COLADOS EN MATERIAS
-        // El bot puso apellidos donde van las materias. Los bloqueamos.
+        // 3. Apellidos de profesores puestos como materia
         const apellidosEnMaterias = ['andrade', 'cruz', 'carrillo', 'solorzano'];
         if (apellidosEnMaterias.includes(mat)) return true;
 
-        // 4. ERRORES DE DEDO DEL BOT
-        if (mat.endsWith('aa')) return true; // Ej: "Diferencialaa"
+        // 4. Typos de bot
+        if (mat.endsWith('aa')) return true;
 
         return false;
     };
 
     db.collection("profesores").orderBy('apellido').onSnapshot(snapshot => {
-        // --- FILTRO MAESTRO DE PROFESORES ---
         profesoresDataCache = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
             .filter(prof => !esSpamProfesor(prof)); 
@@ -232,8 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         profesoresDataCache.forEach(prof => {
             prof.materias?.forEach(materia => {
-                // --- FILTRO MAESTRO DE MATERIAS ---
-                // Solo agregamos la materia si NO es spam
                 if (!esMateriaSpam(materia)) {
                     materiasUnicasCache.add(materia);
                 }
@@ -289,8 +285,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- DETALLE PROFESOR ---
     const abrirDetalleProfesor = async (profesor) => {
         mostrarVista(viewProfesorDetail);
+        
         const total = profesor.totalReseñas || 0;
         const avgRating = total > 0 ? (profesor.sumaCalificaciones / total) : 0;
         const avgClaridad = total > 0 ? ((profesor.sumaClaridad || 0) / total) : 0;
@@ -315,10 +313,13 @@ document.addEventListener('DOMContentLoaded', () => {
         viewProfesorDetail.querySelector('.btn-back').addEventListener('click', goBack);
 
         const reviewsSnapshot = await db.collection('resenas').where('profesorId', '==', profesor.id).orderBy('timestamp', 'desc').get();
-        const todasLasResenas = reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        const todasLasResenas = reviewsSnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(r => !esMateriaSpam(r.materia)); 
 
-        // Filtramos las materias spam también en el detalle
         const materiasLimpias = (profesor.materias || []).filter(m => !esMateriaSpam(m));
+
         renderizarFiltrosYResenas(todasLasResenas, materiasLimpias);
     };
 
@@ -390,11 +391,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // --- FORMULARIO NUEVA RESEÑA ---
     formAddReview.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         if (!auth.currentUser) {
-            alert("Estableciendo conexión segura... intenta en unos segundos.");
+            alert("Conectando con el servidor seguro...");
             return;
         }
 
@@ -409,14 +411,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (carrera === "") {
-            alert('Por favor, selecciona tu carrera.');
+            alert('Selecciona tu carrera.');
             return;
         }
 
-        // Validación extra frontend para evitar enviar spam
+        // VALIDACIÓN FRONTEND ANTI-SPAM
         if (esSpamProfesor({nombre, apellido})) {
              alert("Error: Nombre inválido detectado.");
              return;
+        }
+        if (esMateriaSpam(materia)) {
+            alert("Error: Materia inválida.");
+            return;
         }
 
         const profesorId = normalizarTexto(apellido + nombre);
@@ -426,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await db.runTransaction(async (transaction) => {
                 const profDoc = await transaction.get(profesorRef);
                 
-                // --- CANDADO DE SEGURIDAD (BACKEND LOGIC) ---
+                // BACKEND: Evitar crear profesores nuevos
                 if (!profDoc.exists) {
                     throw "PROFESOR_NO_EXISTE";
                 }
@@ -445,10 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const reseñaRef = db.collection('resenas').doc();
                 transaction.set(reseñaRef, {
-                    profesorId, 
-                    materia, 
-                    calificacion: currentRatings.general, 
-                    texto,
+                    profesorId, materia, calificacion: currentRatings.general, texto,
                     userId: auth.currentUser.uid, 
                     calificacionesDetalladas: {
                         claridad: currentRatings.claridad,
@@ -467,17 +470,17 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Error al publicar: ", error);
             
             if (error === "PROFESOR_NO_EXISTE") {
-                alert("⛔ ERROR DE SEGURIDAD: No se puede agregar un profesor nuevo automáticamente. \n\nPara evitar spam, solo se permiten reseñas a profesores existentes. Si falta uno real, contáctanos.");
+                alert("⛔ Error: No se puede agregar un profesor nuevo. Solo se permiten reseñas a profesores existentes.");
             } 
             else if (error.code === 'resource-exhausted' || (error.message && error.message.includes('429'))) {
-                alert("¡Límite diario alcanzado! 🔥 Por el ataque de bots, el servicio se ha pausado por hoy. Intenta mañana.");
+                alert("¡Límite diario alcanzado! Intenta mañana.");
             } else {
-                alert("Hubo un problema al publicar tu reseña. Por favor, intenta de nuevo.");
+                alert("Hubo un problema. Intenta de nuevo.");
             }
         }
     });
 
-    // --- LÓGICA DE AUTOCOMPLETADO ---
+    // --- AUTOCOMPLETADO Y UI HELPERS ---
     const showSuggestions = (element, suggestions, container) => {
         container.innerHTML = '';
         if (suggestions.length === 0) {
@@ -490,7 +493,6 @@ document.addEventListener('DOMContentLoaded', () => {
             item.textContent = typeof suggestion === 'object' 
                 ? `${suggestion.apellido}, ${suggestion.nombre}` 
                 : suggestion;
-            
             item.addEventListener('click', () => {
                 if (typeof suggestion === 'object') {
                     inputNombre.value = suggestion.nombre;
@@ -534,7 +536,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- HELPERS Y LÓGICA DE UI ---
     const getStarsHTML = (rating) => {
         let html = '';
         const roundedRating = Math.round(rating * 2) / 2;
@@ -549,7 +550,6 @@ document.addEventListener('DOMContentLoaded', () => {
     starRatingInputs.forEach(container => {
         const stars = [...container.querySelectorAll('.fa-star')];
         const ratingType = container.dataset.ratingType;
-
         const updateStarsVisual = (rating) => {
             stars.forEach(star => {
                 const isSelected = star.dataset.value <= rating;
@@ -558,7 +558,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 star.classList.toggle('far', !isSelected);
             });
         };
-
         stars.forEach(star => {
             star.addEventListener('mouseover', () => updateStarsVisual(star.dataset.value));
             star.addEventListener('mouseout', () => updateStarsVisual(currentRatings[ratingType]));
@@ -586,17 +585,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'review-card';
         const fecha = reseña.timestamp?.toDate().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) || 'Fecha no disponible';
-        
         let detailedRatingsHTML = '';
         if (reseña.calificacionesDetalladas) {
             detailedRatingsHTML = `
             <div class="review-detailed-ratings">
-                <div><span class="label">Claridad al Explicar:</span> <span class="stars">${getStarsHTML(reseña.calificacionesDetalladas.claridad || 0)}</span></div>
+                <div><span class="label">Claridad:</span> <span class="stars">${getStarsHTML(reseña.calificacionesDetalladas.claridad || 0)}</span></div>
                 <div><span class="label">Dificultad:</span> <span class="stars">${getStarsHTML(reseña.calificacionesDetalladas.dificultad || 0)}</span></div>
-                <div><span class="label">Carga de Tareas:</span> <span class="stars">${getStarsHTML(reseña.calificacionesDetalladas.carga || 0)}</span></div>
+                <div><span class="label">Carga:</span> <span class="stars">${getStarsHTML(reseña.calificacionesDetalladas.carga || 0)}</span></div>
             </div>`;
         }
-        
         card.innerHTML = `
             <div class="review-header">
                 <h4>Reseña sobre <strong>${reseña.materia}</strong></h4>
@@ -605,7 +602,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <p class="review-body">${reseña.texto}</p>
             ${detailedRatingsHTML}
             <div class="review-footer">
-                <span class="review-date">Publicado el ${fecha}</span>
+                <span class="review-date">${fecha}</span>
                 <div class="review-actions">
                     <button data-action="like"><i class="fas fa-thumbs-up"></i> <span>${reseña.likes || 0}</span></button>
                     <button data-action="dislike"><i class="fas fa-thumbs-down"></i> <span>${reseña.dislikes || 0}</span></button>
@@ -621,22 +618,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         replyBtn.addEventListener('click', () => toggleReplyForm(card, id));
         
-        // Cargar respuestas existentes
         db.collection('resenas').doc(id).collection('respuestas').orderBy('timestamp').onSnapshot(snapshot => {
             repliesContainer.innerHTML = '';
             snapshot.forEach(doc => {
                 const reply = doc.data();
                 const replyCard = document.createElement('div');
                 replyCard.className = 'reply-card';
-                replyCard.innerHTML = `<p class="reply-header"><strong>${reply.alias || 'Anónimo'}</strong> respondió:</p><p>${reply.texto}</p>`;
+                replyCard.innerHTML = `<p class="reply-header"><strong>${reply.alias || 'Anónimo'}</strong>:</p><p>${reply.texto}</p>`;
                 repliesContainer.appendChild(replyCard);
             });
         });
 
         const voted = localStorage.getItem(`voted_${id}`);
         if (voted) {
-            likeBtn.disabled = true;
-            dislikeBtn.disabled = true;
+            likeBtn.disabled = true; dislikeBtn.disabled = true;
             if (voted === 'like') likeBtn.style.color = 'var(--color-accent)';
         } else {
             likeBtn.addEventListener('click', () => handleVote(id, 'likes', likeBtn, dislikeBtn));
@@ -647,21 +642,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const toggleReplyForm = (reviewCard, reviewId) => {
         let form = reviewCard.querySelector('.reply-form');
-        
-        if (!auth.currentUser) {
-            alert("Necesitas conexión segura para responder.");
-            return;
-        }
-
-        if (form) {
-            form.remove();
-        } else {
+        if (!auth.currentUser) return alert("Conectando...");
+        if (form) { form.remove(); } else {
             form = document.createElement('form');
             form.className = 'reply-form';
-            form.innerHTML = `
-                <textarea placeholder="Escribe una respuesta..." required></textarea>
-                <button type="submit" class="btn-primary">Enviar</button>
-            `;
+            form.innerHTML = `<textarea placeholder="Respuesta..." required></textarea><button type="submit" class="btn-primary">Enviar</button>`;
             reviewCard.appendChild(form);
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -669,10 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const alias = localStorage.getItem('chatAlias') || 'Anónimo';
                 if (texto) {
                     db.collection('resenas').doc(reviewId).collection('respuestas').add({
-                        texto,
-                        alias,
-                        userId: auth.currentUser.uid,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        texto, alias, userId: auth.currentUser.uid, timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     form.remove();
                 }
@@ -681,25 +663,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleVote = (reviewId, voteType, likeBtn, dislikeBtn) => {
-        if (!auth.currentUser) return; 
-
+        if (!auth.currentUser) return;
         const votedKey = `voted_${reviewId}`;
         if (localStorage.getItem(votedKey)) return;
-
         localStorage.setItem(votedKey, voteType);
-        likeBtn.disabled = true;
-        dislikeBtn.disabled = true;
-
+        likeBtn.disabled = true; dislikeBtn.disabled = true;
         const reviewRef = db.collection('resenas').doc(reviewId);
         db.runTransaction(async (transaction) => {
             const doc = await transaction.get(reviewRef);
             if (!doc.exists) return;
             const currentVotes = doc.data()[voteType] || 0;
             transaction.update(reviewRef, { [voteType]: currentVotes + 1 });
-            
             const span = voteType === 'likes' ? likeBtn.querySelector('span') : dislikeBtn.querySelector('span');
             span.textContent = currentVotes + 1;
-        }).catch(error => console.error("Error al votar: ", error));
+        });
     };
     
     mostrarVista(viewMain);
